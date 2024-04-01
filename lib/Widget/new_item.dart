@@ -1,6 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/widgets.dart';
+import 'package:http/http.dart'
+    as http; //All contents by this import statement should be warpped by http
 import 'package:shopping_app/Data/categories.dart';
 import 'package:shopping_app/Models/category.dart';
 import 'package:shopping_app/Models/grocery_item.dart';
@@ -19,19 +23,42 @@ class _NewItemState extends State<NewItem> {
   var _enteredName = '';
   var _quantity = 1;
   var _selectedCategory = categories[Categories.vegetables]!;
+  var _isSending = false;
 
-  void _saveItem() {
+  void _saveItem() async {
     if (_formKey.currentState!
         .validate()) //Return true if all validator functions pass
     {
       _formKey.currentState!.save();
+      setState(() {
+        _isSending = true;
+      });
+
+      final url = Uri.https('shopping-app-589c4-default-rtdb.firebaseio.com',
+          'shopping-list.json'); //'shopping-list.json' will create sub folder in firebase
+      final response = await http.post(url,
+          headers: {
+            'Content-Type': 'application/json' //the format of data
+          },
+          body: json.encode({
+            // We should add encoding to the data
+            'name': _enteredName,
+            'quantity': _quantity,
+            'category': _selectedCategory
+                .title //we should spacify the type because object may fail in encoding
+          }));
+
+      final Map<String, dynamic> responseData = json.decode(response.body);
+      if (!context.mounted) {
+        //check if the context change
+        return;
+      }
       Navigator.of(context).pop(GroceryItem(
-          id: DateTime.now().toString(),
+          id: responseData['name'],
           name: _enteredName,
           quantity: _quantity,
-          category: _selectedCategory));
-      print(_enteredName);
-      print(_quantity);
+          category: _selectedCategory)); //Context may change because of async
+      // Navigator.of(context).pop();
     }
   }
 
@@ -131,12 +158,21 @@ class _NewItemState extends State<NewItem> {
                   mainAxisAlignment: MainAxisAlignment.end,
                   children: [
                     TextButton(
-                        onPressed: () {
-                          _formKey.currentState!.reset();
-                        },
+                        onPressed: _isSending
+                            ? null
+                            : () {
+                                _formKey.currentState!.reset();
+                              },
                         child: const Text('Reset')),
                     ElevatedButton(
-                        onPressed: _saveItem, child: const Text('Add item'))
+                        onPressed: _isSending ? null : _saveItem,
+                        child: _isSending
+                            ? SizedBox(
+                                height: 16,
+                                width: 16,
+                                child: CircularProgressIndicator(),
+                              )
+                            : const Text('Add item'))
                   ],
                 )
               ],
